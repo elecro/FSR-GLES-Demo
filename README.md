@@ -1,6 +1,4 @@
-# ImGui OpenGL ES skeleton
-
-A skeleton project which integrates ImGui with OpenGL ES (3.0+) using GLFW.
+# Simple FSR integration into an ImGui OpenGL ES demo app
 
 
 ## Linux build & run
@@ -11,10 +9,10 @@ Before building make sure that the submodule(s) are correctly initialized:
 $ git submodule update --init 
 ```
 
-To build and run:
+To build and run in the project root dir
 
 ```sh
 $ cmake -Bbuild -H.
 $ make -C buld
-$ ./build/src/skeleton
+$ ./build/gles_fsr <input image>
 ```

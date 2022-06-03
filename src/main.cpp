@@ -6,8 +6,6 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
-#include "misc/cpp/imgui_stdlib.h"
-
 #include <GLFW/glfw3.h>
 #include <GLES3/gl32.h>
 
@@ -94,9 +92,25 @@ static void runBilinear(struct FSRConstants fsrData, uint32_t bilinearProgram, i
     }
 }
 
+uint32_t createOutputImage(struct FSRConstants fsrData) {
+    uint32_t outputImage = 0;
+    glGenTextures(1, &outputImage);
+    glBindTexture(GL_TEXTURE_2D, outputImage);
+
+    // Setup filtering parameters for display
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, fsrData.output.width, fsrData.output.height);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return outputImage;
+}
 
 static void glfw_error_callback(int error, const char* description) {
-    fprintf(stderr, "Glfw Error %d: %s\n", error, description);
+        fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
 static void on_gl_error(GLenum source, GLenum type, GLuint id, GLenum severity,
@@ -119,8 +133,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-
-
     const char* glsl_version = "#version 300 es";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
@@ -129,7 +141,7 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, 1);
 
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(1024, 600, "GLES skeleton", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1024, 600, "GLES FSR", NULL, NULL);
     if (window == NULL) {
         return 1;
     }
@@ -140,37 +152,33 @@ int main(int argc, char** argv) {
 
     glfwSwapInterval(1);
 
+    // GUI options:
+    bool useFSR = true;
+    float zoom = 1.0f;
+    float moveX = 0.0f;
+    float moveY = 1.0f;
+    float resMultiplier = 4.0f;
+    float rcasAtt = 0.25f;
 
-    uint32_t my_image_width = 0;
-    uint32_t my_image_height = 0;
-    GLuint my_image_texture = 0;
-    bool ret = LoadTextureFromFile(input_image, &my_image_texture, &my_image_width, &my_image_height);
-    IM_ASSERT(ret);
 
     struct FSRConstants fsrData = {};
-    fsrData.input = { my_image_width, my_image_height };
-    fsrData.output = { my_image_width*4, my_image_height*4 };
 
-    prepareFSR(&fsrData, 0.25);
+    uint32_t inputTexture = 0;
+    bool ret = LoadTextureFromFile(input_image, &inputTexture, &fsrData.input.width, &fsrData.input.height);
+    IM_ASSERT(ret);
 
-    uint32_t fsrProgramEASU = createFSRComputeProgramEAUS();
-    uint32_t fsrProgramRCAS = createFSRComputeProgramRCAS();
-    uint32_t bilinearProgram = createBilinearComputeProgram();
+    fsrData.output = { fsrData.input.width * resMultiplier, fsrData.input.height * resMultiplier };
 
-    uint32_t outputImage;
-    {
-        glGenTextures(1, &outputImage);
-        glBindTexture(GL_TEXTURE_2D, outputImage);
+    prepareFSR(&fsrData, rcasAtt);
 
-        // Setup filtering parameters for display
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // This is required on WebGL for non power-of-two textures
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); // Same
+    const std::string baseDir = "src/";
 
-        glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, fsrData.output.width, fsrData.output.height);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
+    uint32_t fsrProgramEASU = createFSRComputeProgramEAUS(baseDir);
+    uint32_t fsrProgramRCAS = createFSRComputeProgramRCAS(baseDir);
+    uint32_t bilinearProgram = createBilinearComputeProgram(baseDir);
+
+    uint32_t outputImage = createOutputImage(fsrData);
+
 
     // upload the FSR constants, this contains the EASU and RCAS constants in a single uniform
     // TODO destroy the buffer
@@ -182,7 +190,7 @@ int main(int argc, char** argv) {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
 
-    runFSR(fsrData, fsrProgramEASU, fsrProgramRCAS, fsrData_vbo, my_image_texture, outputImage);
+    runFSR(fsrData, fsrProgramEASU, fsrProgramRCAS, fsrData_vbo, inputTexture, outputImage);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -193,17 +201,9 @@ int main(int argc, char** argv) {
 
     ImVec4 clear_color{0.0f, 1.0f, 0.0f, 1.0f};
 
-    bool useFSR = true;
-    float zoom = 1.0f;
+
     while (!glfwWindowShouldClose(window))
     {
-        // Poll and handle events (inputs, window resize, etc.)
-        // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
-        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
-        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-        glfwPollEvents();
-
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -211,24 +211,35 @@ int main(int argc, char** argv) {
 
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
+
         // Render app
         glViewport(0, 0, display_w, display_h);
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
 
         {
-            static float rcasAtt = 0.25f;
             bool changed = false;
 
             ImGui::Begin("FSR RCAS config");
 
             changed |= ImGui::Checkbox("Enable FSR", &useFSR);
+            changed |= ImGui::SliderFloat("Resolution Multiplier", &resMultiplier, 0.0001, 10.0f);
             changed |= ImGui::SliderFloat("rcasAttenuation", &rcasAtt, 0.0f, 2.0f);
 
             if (changed) {
+                Extent oldOutput = fsrData.output;
+
+                fsrData.output = { fsrData.input.width * resMultiplier, fsrData.input.height * resMultiplier };
+
+                if (oldOutput.width != fsrData.output.width) {
+                    glDeleteTextures(1, &outputImage);
+                    outputImage = createOutputImage(fsrData);
+                    printf("Recreated output image\n");
+                }
+
                 if (!useFSR) {
                     printf("Running Bilinear Program\n");
-                    runBilinear(fsrData, bilinearProgram, fsrData_vbo, my_image_texture, outputImage);
+                    runBilinear(fsrData, bilinearProgram, fsrData_vbo, inputTexture, outputImage);
                 } else {
                     prepareFSR(&fsrData, rcasAtt);
 
@@ -237,11 +248,13 @@ int main(int argc, char** argv) {
                     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
                     printf("Running FSR\n");
-                    runFSR(fsrData, fsrProgramEASU, fsrProgramRCAS, fsrData_vbo, my_image_texture, outputImage);
+                    runFSR(fsrData, fsrProgramEASU, fsrProgramRCAS, fsrData_vbo, inputTexture, outputImage);
                 }
             }
 
             ImGui::SliderFloat("Zoom", &zoom, 0.000001f, 2.0f);
+            ImGui::SliderFloat("Move X", &moveX, 0.0, 1.0f);
+            ImGui::SliderFloat("Move Y", &moveY, 0.0, 1.0f);
 
 
             // Edit 3 floats representing a color
@@ -254,22 +267,28 @@ int main(int argc, char** argv) {
             ImGui::End();
         }
 
+        ImVec2 displaySize = ImVec2(fsrData.output.width * zoom, fsrData.output.height * zoom);
+        ImVec2 viewPosStart = ImVec2(moveX, moveX);
+        ImVec2 viewPosEnd = ImVec2(moveY, moveY);
+
         ImGui::Begin("INPUT Image");
-        ImGui::Text("pointer = %p", my_image_texture);
-        ImGui::Text("size = %d x %d", my_image_width, my_image_height);
-        ImGui::Image((void*)(intptr_t)my_image_texture, ImVec2(fsrData.output.width * zoom, fsrData.output.height * zoom), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+        ImGui::Text("pointer = %p", inputTexture);
+        ImGui::Text("size = %d x %d", fsrData.input.width, fsrData.input.height);
+        ImGui::Image((void*)(intptr_t)inputTexture, displaySize, viewPosStart, viewPosEnd);
         ImGui::End();
 
         ImGui::Begin("OUTPUT Image");
         ImGui::Text("pointer = %p", outputImage);
         ImGui::Text("size = %d x %d", fsrData.output.width, fsrData.output.height);
-        ImGui::Image((void*)(intptr_t)outputImage, ImVec2(fsrData.output.width * zoom, fsrData.output.height * zoom), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+        ImGui::Image((void*)(intptr_t)outputImage, displaySize, viewPosStart, viewPosEnd);
         ImGui::End();
 
         // Render ImGui
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
+
+        glfwPollEvents();
     }
 
     // Cleanup

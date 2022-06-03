@@ -89,7 +89,7 @@ void prepareFSR(FSRConstants* fsrData, float rcasAttenuation)
 
 
 
-std::unique_ptr<uint8_t> readFile(const char* filename) {
+static std::unique_ptr<uint8_t> readFile(const char* filename) {
     FILE* fp = fopen(filename, "r");
     if (fp == NULL) {
         printf("Unable to open: %s\n", filename);
@@ -147,7 +147,7 @@ static uint32_t compileProgram(const std::string& source) {
     return compute_program;
 }
 
-std::string buildShader(const std::vector<std::string>& headers, const std::vector<std::string>& filenames, const std::map<std::string, std::string>& defines)
+static std::string buildShader(const std::vector<std::string>& headers, const std::vector<std::string>& filenames, const std::map<std::string, std::string>& defines)
 {
     std::stringstream out;
     for (const std::string& header : headers) {
@@ -171,7 +171,7 @@ std::string buildShader(const std::vector<std::string>& headers, const std::vect
     return out.str();
 }
 
-uint32_t createFSRComputeProgramEAUS() {
+uint32_t createFSRComputeProgramEAUS(const std::string& baseDir) {
     std::map<std::string, std::string> defines = {
         { "A_GPU", "1" },
         { "A_GLSL", "1" },
@@ -182,7 +182,11 @@ uint32_t createFSRComputeProgramEAUS() {
         { "SAMPLE_RCAS", "0" },
         { "SAMPLE_BILINEAR", "0" },
     };
-    std::vector<std::string> files = { "ffx_a.h", "ffx_fsr1.h", "fsr_easu.compute.base.glsl" };
+    std::vector<std::string> files = {
+        baseDir + "ffx_a.h",
+        baseDir + "ffx_fsr1.h",
+        baseDir + "fsr_easu.compute.base.glsl"
+    };
     std::vector<std::string> header = {
         "#version 320 es",
         //"#extension GL_KHR_vulkan_glsl : enable",
@@ -197,7 +201,7 @@ uint32_t createFSRComputeProgramEAUS() {
     return compileProgram(shader);
 }
 
-uint32_t createFSRComputeProgramRCAS() {
+uint32_t createFSRComputeProgramRCAS(const std::string& baseDir) {
     std::map<std::string, std::string> defines = {
         { "A_GPU", "1" },
         { "A_GLSL", "1" },
@@ -208,7 +212,11 @@ uint32_t createFSRComputeProgramRCAS() {
         { "SAMPLE_EASU", "0" },
         { "SAMPLE_BILINEAR", "0" },
     };
-    std::vector<std::string> files = { "ffx_a.h", "ffx_fsr1.h", "fsr_easu.compute.base.glsl" };
+    std::vector<std::string> files = {
+        baseDir + "ffx_a.h",
+        baseDir + "ffx_fsr1.h",
+        baseDir + "fsr_easu.compute.base.glsl"
+    };
     std::vector<std::string> header = {
         "#version 320 es",
         //"#extension GL_KHR_vulkan_glsl : enable",
@@ -222,7 +230,7 @@ uint32_t createFSRComputeProgramRCAS() {
     return compileProgram(shader);
 }
 
-uint32_t createBilinearComputeProgram() {
+uint32_t createBilinearComputeProgram(const std::string& baseDir) {
 
     std::map<std::string, std::string> defines = {
         { "A_GPU", "1" },
@@ -235,9 +243,9 @@ uint32_t createBilinearComputeProgram() {
         { "SAMPLE_EASU", "0" },
     };
     std::vector<std::string> files = {
-        "ffx_a.h",
-        //"ffx_fsr1.h",
-        "fsr_easu.compute.base.glsl"
+        baseDir + "ffx_a.h",
+//        baseDir + "ffx_fsr1.h",
+        baseDir + "fsr_easu.compute.base.glsl"
     };
     std::vector<std::string> header = {
         "#version 320 es",
@@ -250,58 +258,4 @@ uint32_t createBilinearComputeProgram() {
     std::string shader = buildShader(header, files, defines);
 
     return compileProgram(shader);
-}
-
-
-uint32_t createFSRComputeProgram(const char* inputsrc) {
-
-    FILE* fp = fopen(inputsrc, "r");
-    if (fp == NULL) {
-        printf("Unable to open: %s\n", inputsrc);
-        return 0;
-    }
-
-    fseek(fp, 0L, SEEK_END);
-    size_t fileSize = ftell(fp);
-    fseek(fp, 0L, SEEK_SET);
-
-    std::unique_ptr<uint8_t> buffer(new uint8_t[fileSize]);
-    size_t readSize = fread(buffer.get(), 1, fileSize, fp);
-
-    const char* compute_src = reinterpret_cast<const char*>(buffer.get());
-
-    // C.1. Create the Compute shader
-    unsigned int compute_shader;
-    {
-        compute_shader = glCreateShader(GL_COMPUTE_SHADER);
-        glShaderSource(compute_shader, 1, &compute_src, NULL);
-        glCompileShader(compute_shader);
-        int success;
-        glGetShaderiv(compute_shader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            char info[512];
-            glGetShaderInfoLog(compute_shader, 512, NULL, info);
-            printf("Compute shader error:\n%s\n", info);
-            return -3;
-        }
-    }
-
-    // C.2. Create the Compute program
-    unsigned int compute_program;
-    {
-        compute_program = glCreateProgram();
-        glAttachShader(compute_program, compute_shader);
-        glLinkProgram(compute_program);
-
-        int success;
-        glGetProgramiv(compute_program, GL_LINK_STATUS, &success);
-        if(!success) {
-            char info[512];
-            glGetProgramInfoLog(compute_program, 512, NULL, info);
-            printf("Compute Program error:\n%s\n", info);
-            return -3;
-        }
-    }
-
-    return compute_program;
 }

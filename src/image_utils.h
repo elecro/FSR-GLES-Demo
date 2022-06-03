@@ -29,8 +29,8 @@ struct FSRConstants {
 
 void prepareFSR(FSRConstants* fsrData, float rcasAttenuation);
 
-uint32_t createFSRComputeProgramEAUS();
-uint32_t createFSRComputeProgramRCAS();
-uint32_t createBilinearComputeProgram();
+uint32_t createFSRComputeProgramEAUS(const std::string& baseDir);
+uint32_t createFSRComputeProgramRCAS(const std::string& baseDir);
+uint32_t createBilinearComputeProgram(const std::string& baseDir);
 
 #endif /* IMAGE_UTILS_H */

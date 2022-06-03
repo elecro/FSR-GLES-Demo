@@ -1,9 +1,10 @@
 find_package(PkgConfig REQUIRED)
-find_package(glfw3 3.3 REQUIRED)
+#find_package(glfw3 3.3 REQUIRED)
 pkg_check_modules(EGL REQUIRED egl)
 
 add_executable(skeleton
     main.cpp
+    image_utils.cpp
 
     ${IMGUI_BASE_DIR}/examples/imgui_impl_opengl3.cpp
     ${IMGUI_BASE_DIR}/examples/imgui_impl_glfw.cpp

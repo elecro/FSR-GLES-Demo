@@ -86,7 +86,7 @@ void CurrFilter(AU2 pos)
 {
 #if SAMPLE_BILINEAR
     AF2 pp = (AF2(pos) * AF2_AU2(Const0.xy) + AF2_AU2(Const0.zw)) * AF2_AU2(Const1.xy) + AF2(0.5, -0.5) * AF2_AU2(Const1.zw);
-    imageStore(OutputTexture, ASU2(pos), textureLod(sampler2D(InputTexture,InputSampler), pp, 0.0));
+    imageStore(OutputTexture, ASU2(pos), textureLod(InputTexture, pp, 0.0));
 #endif
 #if SAMPLE_EASU
     #if SAMPLE_SLOW_FALLBACK

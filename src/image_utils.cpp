@@ -229,6 +229,36 @@ uint32_t createFSRComputeProgramRCAS() {
     return compileProgram(shader);
 }
 
+uint32_t createBilinearComputeProgram() {
+
+    std::map<std::string, std::string> defines = {
+        { "A_GPU", "1" },
+        { "A_GLSL", "1" },
+        { "SAMPLE_BILINEAR", "1"},
+        { "SAMPLE_SLOW_FALLBACK", "1" },
+
+        { "SAMPLE_RCAS", "0" },
+        { "FSR_RCAS_F", "0" },
+        { "SAMPLE_EASU", "0" },
+    };
+    std::vector<std::string> files = {
+        "ffx_a.h",
+        //"ffx_fsr1.h",
+        "fsr_easu.compute.base.glsl"
+    };
+    std::vector<std::string> header = {
+        "#version 320 es",
+        //"#extension GL_KHR_vulkan_glsl : enable",
+        //"#extension GL_ARB_separate_shader_objects : enable",
+        //"#extension GL_ARB_shading_language_420pack : enable",
+        //"#extension GL_GOOGLE_include_directive : enable",
+    };
+
+    std::string shader = buildShader(header, files, defines);
+
+    return compileProgram(shader);
+}
+
 
 uint32_t createFSRComputeProgram(const char* inputsrc) {
 

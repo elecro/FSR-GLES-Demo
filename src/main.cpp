@@ -62,6 +62,38 @@ static void runFSR(struct FSRConstants fsrData, uint32_t fsrProgramEASU, uint32_
     }
 }
 
+static void runBilinear(struct FSRConstants fsrData, uint32_t bilinearProgram, int32_t fsrData_vbo, uint32_t inputImage, uint32_t outputImage) {
+    uint32_t displayWidth = fsrData.output.width;
+    uint32_t displayHeight = fsrData.output.height;
+
+    static const int threadGroupWorkRegionDim = 16;
+    int dispatchX = (displayWidth + (threadGroupWorkRegionDim - 1)) / threadGroupWorkRegionDim;
+    int dispatchY = (displayHeight + (threadGroupWorkRegionDim - 1)) / threadGroupWorkRegionDim;
+
+
+    // binding point constants in the shaders
+    const int inFSRDataPos = 0;
+    const int inFSRInputTexture = 1;
+    const int inFSROutputTexture = 2;
+
+    { // run FSR EASU
+        glUseProgram(bilinearProgram);
+
+        // connect the input uniform data
+        glBindBufferBase(GL_UNIFORM_BUFFER, inFSRDataPos, fsrData_vbo);
+
+        // bind the input image to a texture unit
+        glActiveTexture(GL_TEXTURE0 + inFSRInputTexture);
+        glBindTexture(GL_TEXTURE_2D, inputImage);
+
+        // connect the output image
+        glBindImageTexture(inFSROutputTexture, outputImage, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+        glDispatchCompute(dispatchX, dispatchY, 1);
+        glFinish();
+    }
+}
+
 
 static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
@@ -123,6 +155,7 @@ int main(int argc, char** argv) {
 
     uint32_t fsrProgramEASU = createFSRComputeProgramEAUS();
     uint32_t fsrProgramRCAS = createFSRComputeProgramRCAS();
+    uint32_t bilinearProgram = createBilinearComputeProgram();
 
     uint32_t outputImage;
     {
@@ -160,7 +193,7 @@ int main(int argc, char** argv) {
 
     ImVec4 clear_color{0.0f, 1.0f, 0.0f, 1.0f};
 
-
+    bool useFSR = true;
     float zoom = 1.0f;
     while (!glfwWindowShouldClose(window))
     {
@@ -185,18 +218,27 @@ int main(int argc, char** argv) {
 
         {
             static float rcasAtt = 0.25f;
-            static int counter = 0;
+            bool changed = false;
 
             ImGui::Begin("FSR RCAS config");
-            // Edit 1 float using a slider from 0.0f to 1.0f
-            if (ImGui::SliderFloat("rcasAttenuation", &rcasAtt, 0.0f, 2.0f)) {
-                prepareFSR(&fsrData, rcasAtt);
 
-                glBindBuffer(GL_ARRAY_BUFFER, fsrData_vbo);
-                glBufferData(GL_ARRAY_BUFFER, sizeof(fsrData), &fsrData, GL_DYNAMIC_DRAW);
-                glBindBuffer(GL_ARRAY_BUFFER, 0);
+            changed |= ImGui::Checkbox("Enable FSR", &useFSR);
+            changed |= ImGui::SliderFloat("rcasAttenuation", &rcasAtt, 0.0f, 2.0f);
 
-                runFSR(fsrData, fsrProgramEASU, fsrProgramRCAS, fsrData_vbo, my_image_texture, outputImage);
+            if (changed) {
+                if (!useFSR) {
+                    printf("Running Bilinear Program\n");
+                    runBilinear(fsrData, bilinearProgram, fsrData_vbo, my_image_texture, outputImage);
+                } else {
+                    prepareFSR(&fsrData, rcasAtt);
+
+                    glBindBuffer(GL_ARRAY_BUFFER, fsrData_vbo);
+                    glBufferData(GL_ARRAY_BUFFER, sizeof(fsrData), &fsrData, GL_DYNAMIC_DRAW);
+                    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+                    printf("Running FSR\n");
+                    runFSR(fsrData, fsrProgramEASU, fsrProgramRCAS, fsrData_vbo, my_image_texture, outputImage);
+                }
             }
 
             ImGui::SliderFloat("Zoom", &zoom, 0.000001f, 2.0f);

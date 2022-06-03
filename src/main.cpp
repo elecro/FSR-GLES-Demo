@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    ImVec4 clear_color{0.0f, 1.0f, 0.0f, 1.0f};
+    ImVec4 clear_color{0.1f, 0.1f, 0.1f, 1.0f};
 
 
     while (!glfwWindowShouldClose(window))
@@ -220,6 +220,7 @@ int main(int argc, char** argv) {
         {
             bool changed = false;
 
+            ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
             ImGui::Begin("FSR RCAS config");
 
             changed |= ImGui::Checkbox("Enable FSR", &useFSR);
@@ -271,12 +272,14 @@ int main(int argc, char** argv) {
         ImVec2 viewPosStart = ImVec2(moveX, moveX);
         ImVec2 viewPosEnd = ImVec2(moveY, moveY);
 
+        ImGui::SetNextWindowPos(ImVec2(20, 150), ImGuiCond_FirstUseEver);
         ImGui::Begin("INPUT Image");
         ImGui::Text("pointer = %p", inputTexture);
         ImGui::Text("size = %d x %d", fsrData.input.width, fsrData.input.height);
         ImGui::Image((void*)(intptr_t)inputTexture, displaySize, viewPosStart, viewPosEnd);
         ImGui::End();
 
+        ImGui::SetNextWindowPos(ImVec2(40, 200), ImGuiCond_FirstUseEver);
         ImGui::Begin("OUTPUT Image");
         ImGui::Text("pointer = %p", outputImage);
         ImGui::Text("size = %d x %d", fsrData.output.width, fsrData.output.height);

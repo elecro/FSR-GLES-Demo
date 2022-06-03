@@ -14,7 +14,7 @@ To build and run in the project root dir
 
 ```sh
 $ cmake -Bbuild -H.
-$ make -C buld
+$ make -C build
 $ ./build/gles_fsr <input image>
 ```
 

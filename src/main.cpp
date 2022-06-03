@@ -13,6 +13,56 @@
 
 #include "image_utils.h"
 
+static void runFSR(struct FSRConstants fsrData, uint32_t fsrProgramEASU, uint32_t fsrProgramRCAS, uint32_t fsrData_vbo, uint32_t inputImage, uint32_t outputImage) {
+    uint32_t displayWidth = fsrData.output.width;
+    uint32_t displayHeight = fsrData.output.height;
+
+    static const int threadGroupWorkRegionDim = 16;
+    int dispatchX = (displayWidth + (threadGroupWorkRegionDim - 1)) / threadGroupWorkRegionDim;
+    int dispatchY = (displayHeight + (threadGroupWorkRegionDim - 1)) / threadGroupWorkRegionDim;
+
+
+    // binding point constants in the shaders
+    const int inFSRDataPos = 0;
+    const int inFSRInputTexture = 1;
+    const int inFSROutputTexture = 2;
+
+    { // run FSR EASU
+        glUseProgram(fsrProgramEASU);
+
+        // connect the input uniform data
+        glBindBufferBase(GL_UNIFORM_BUFFER, inFSRDataPos, fsrData_vbo);
+
+        // bind the input image to a texture unit
+        glActiveTexture(GL_TEXTURE0 + inFSRInputTexture);
+        glBindTexture(GL_TEXTURE_2D, inputImage);
+
+        // connect the output image
+        glBindImageTexture(inFSROutputTexture, outputImage, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+        glDispatchCompute(dispatchX, dispatchY, 1);
+        glFinish();
+    }
+
+    {
+        // FSR RCAS
+        // connect the input uniform data
+        glBindBufferBase(GL_UNIFORM_BUFFER, inFSRDataPos, fsrData_vbo);
+
+        // connect the previous image's output as input
+        glActiveTexture(GL_TEXTURE0 + inFSRInputTexture);
+        glBindTexture(GL_TEXTURE_2D, outputImage);
+
+        // connect the output image which is the same as the input image
+        glBindImageTexture(inFSROutputTexture, outputImage, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+        glUseProgram(fsrProgramRCAS);
+        glDispatchCompute(dispatchX, dispatchY, 1);
+        glFinish();
+    }
+}
+
+
 static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
@@ -74,13 +124,6 @@ int main(int argc, char** argv) {
     uint32_t fsrProgramEASU = createFSRComputeProgramEAUS();
     uint32_t fsrProgramRCAS = createFSRComputeProgramRCAS();
 
-    uint32_t displayWidth = fsrData.output.width;
-    uint32_t displayHeight = fsrData.output.height;
-
-    static const int threadGroupWorkRegionDim = 16;
-    int dispatchX = (displayWidth + (threadGroupWorkRegionDim - 1)) / threadGroupWorkRegionDim;
-    int dispatchY = (displayHeight + (threadGroupWorkRegionDim - 1)) / threadGroupWorkRegionDim;
-
     uint32_t outputImage;
     {
         glGenTextures(1, &outputImage);
@@ -106,48 +149,7 @@ int main(int argc, char** argv) {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
 
-    // binding point constants in the shaders
-    const int inFSRDataPos = 0;
-    const int inFSRInputTexture = 1;
-    const int inFSROutputTexture = 2;
-
-    { // run FSR EASU
-
-        glUseProgram(fsrProgramEASU);
-
-        // connect the input uniform data
-        glBindBufferBase(GL_UNIFORM_BUFFER, inFSRDataPos, fsrData_vbo);
-
-        // bind the input image to a texture unit
-        glActiveTexture(GL_TEXTURE0 + inFSRInputTexture);
-        glBindTexture(GL_TEXTURE_2D, my_image_texture);
-
-        // connect the output image
-        glBindImageTexture(inFSROutputTexture, outputImage, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-
-        glDispatchCompute(dispatchX, dispatchY, 1);
-        glFinish();
-    }
-
-
-    {
-        // FSR RCAS
-
-        // connect the input uniform data
-        glBindBufferBase(GL_UNIFORM_BUFFER, inFSRDataPos, fsrData_vbo);
-
-        // connect the previous image's output as input
-        glActiveTexture(GL_TEXTURE0 + inFSRInputTexture);
-        glBindTexture(GL_TEXTURE_2D, outputImage);
-
-        // connect the output image which is the same as the input image
-        glBindImageTexture(inFSROutputTexture, outputImage, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-
-        glUseProgram(fsrProgramRCAS);
-        glDispatchCompute(dispatchX, dispatchY, 1);
-        glFinish();
-    }
-
+    runFSR(fsrData, fsrProgramEASU, fsrProgramRCAS, fsrData_vbo, my_image_texture, outputImage);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -158,6 +160,8 @@ int main(int argc, char** argv) {
 
     ImVec4 clear_color{0.0f, 1.0f, 0.0f, 1.0f};
 
+
+    float zoom = 1.0f;
     while (!glfwWindowShouldClose(window))
     {
         // Poll and handle events (inputs, window resize, etc.)
@@ -179,26 +183,26 @@ int main(int argc, char** argv) {
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // 1. Draw demo window
-        //ImGui::ShowDemoWindow();
-
-        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
         {
-            static float f = 0.0f;
+            static float rcasAtt = 0.25f;
             static int counter = 0;
 
-            ImGui::Begin("Hello, world!");
+            ImGui::Begin("FSR RCAS config");
             // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
-            // Edit 3 floats representing a color
-            ImGui::ColorEdit3("clear color", (float*)&clear_color);
+            if (ImGui::SliderFloat("rcasAttenuation", &rcasAtt, 0.0f, 2.0f)) {
+                prepareFSR(&fsrData, rcasAtt);
 
-            if (ImGui::Button("Button")) {
-                counter++;
+                glBindBuffer(GL_ARRAY_BUFFER, fsrData_vbo);
+                glBufferData(GL_ARRAY_BUFFER, sizeof(fsrData), &fsrData, GL_DYNAMIC_DRAW);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+                runFSR(fsrData, fsrProgramEASU, fsrProgramRCAS, fsrData_vbo, my_image_texture, outputImage);
             }
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
 
+            ImGui::SliderFloat("Zoom", &zoom, 0.000001f, 2.0f);
+
+
+            // Edit 3 floats representing a color
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
             if (ImGui::Button("Exit")) {
@@ -211,13 +215,13 @@ int main(int argc, char** argv) {
         ImGui::Begin("INPUT Image");
         ImGui::Text("pointer = %p", my_image_texture);
         ImGui::Text("size = %d x %d", my_image_width, my_image_height);
-        ImGui::Image((void*)(intptr_t)my_image_texture, ImVec2(fsrData.output.width, fsrData.output.height), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+        ImGui::Image((void*)(intptr_t)my_image_texture, ImVec2(fsrData.output.width * zoom, fsrData.output.height * zoom), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
         ImGui::End();
 
         ImGui::Begin("OUTPUT Image");
         ImGui::Text("pointer = %p", outputImage);
         ImGui::Text("size = %d x %d", fsrData.output.width, fsrData.output.height);
-        ImGui::Image((void*)(intptr_t)outputImage, ImVec2(fsrData.output.width, fsrData.output.height), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+        ImGui::Image((void*)(intptr_t)outputImage, ImVec2(fsrData.output.width * zoom, fsrData.output.height * zoom), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
         ImGui::End();
 
         // Render ImGui

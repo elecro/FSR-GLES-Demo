@@ -193,9 +193,6 @@ uint32_t createFSRComputeProgramEAUS() {
 
     std::string shader = buildShader(header, files, defines);
 
-    FILE* fp = fopen("out.shader", "w");
-    fprintf(fp, "%s", shader.c_str());
-    fclose(fp);
 
     return compileProgram(shader);
 }
@@ -221,10 +218,6 @@ uint32_t createFSRComputeProgramRCAS() {
     };
 
     std::string shader = buildShader(header, files, defines);
-
-    FILE* fp = fopen("outrcas.shader", "w");
-    fprintf(fp, "%s", shader.c_str());
-    fclose(fp);
 
     return compileProgram(shader);
 }

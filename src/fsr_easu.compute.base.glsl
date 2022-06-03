@@ -1,4 +1,6 @@
 
+// COPIED from official FSR sample
+//
 // FidelityFX Super Resolution Sample
 //
 // Copyright (c) 2021 Advanced Micro Devices, Inc. All rights reserved.
@@ -36,7 +38,7 @@ layout(binding=0) uniform const_buffer
 //#define SAMPLE_EASU 1
 
 #if SAMPLE_SLOW_FALLBACK
-    // GL:
+    // GL: removed sampler
     layout(binding=1) uniform sampler2D InputTexture;
     layout(binding=2,rgba32f) uniform highp writeonly image2D OutputTexture;
 
